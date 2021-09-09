@@ -1,19 +1,19 @@
 import { ACTIONS } from './actions'
 
 const initialState = {
-  loading: false
+    loading: false
 }
 
 function rootReducer (state = initialState, action) {
-  const { payload, type } = action
-  switch (type) {
+    const { payload, type } = action
+    switch (type) {
     case ACTIONS.SET_LOADING: {
-      return { ...state, loading: payload }
+        return { ...state, loading: payload }
     }
     default: {
-      return { ...state }
+        return { ...state }
     }
-  }
+    }
 };
 
 export default rootReducer

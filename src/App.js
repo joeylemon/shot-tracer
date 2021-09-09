@@ -7,11 +7,11 @@ const Wrapper = styled.div`
 `
 
 function App () {
-  return (
-    <Wrapper>
-        <VideoCanvas />
-    </Wrapper>
-  )
+    return (
+        <Wrapper>
+            <VideoCanvas />
+        </Wrapper>
+    )
 }
 
 export default App
