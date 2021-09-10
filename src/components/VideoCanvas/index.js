@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react'
+import React, { useRef, useEffect, useCallback, useState } from 'react'
 import styled from 'styled-components'
 import {
     scaleCanvas,
@@ -7,7 +7,9 @@ import {
     lerp,
     getAngle,
     moveFromAngle,
-    drawTrajectoryLine
+    drawTrajectoryLine,
+    downloadBlob,
+    prepareCanvasForDownload
 } from './utils'
 
 // How many pixels moved before registering a drag?
@@ -73,6 +75,10 @@ const VideoCanvas = () => {
         { x: 868.6751783684994, y: 212.93351921927902, offsetX: 573, offsetY: 382, time: 5.099995 },
         { x: 875.9230882060053, y: 236.27424581463734, offsetX: 632, offsetY: 572, time: 5.199994 }])
     const isVideoPlaying = useRef(false)
+    const mediaRecorder = useRef(null)
+    const recordedChunks = useRef([])
+
+    const [isDownloading, setDownloading] = useState(false)
 
     const draw = useCallback((ctx, continuous) => {
         const rect = canvasRef.current.getBoundingClientRect()
@@ -186,6 +192,40 @@ const VideoCanvas = () => {
         window.requestAnimationFrame(() => draw(canvasRef.current.getContext('2d'), true))
     }
 
+    const handleUndo = useCallback(() => {
+        pointsRef.current.pop()
+        draw(canvasRef.current.getContext('2d'))
+    }, [draw])
+
+    const handleDownloadVideo = () => {
+        setDownloading(true)
+
+        const stream = canvasRef.current.captureStream(30)
+        mediaRecorder.current = new MediaRecorder(stream, {
+            mimeType: 'video/webm;codecs=vp8,opus'
+        })
+
+        const { newPts, undoResize } = prepareCanvasForDownload(canvasRef.current, videoRef.current, pointsRef.current)
+        pointsRef.current = newPts
+        handlePlayVideo()
+
+        // ondataavailable will fire in interval of `time || 4000 ms`
+        mediaRecorder.current.start()
+
+        mediaRecorder.current.ondataavailable = function (event) {
+            recordedChunks.current.push(event.data)
+        }
+
+        mediaRecorder.current.onstop = function (event) {
+            const blob = new Blob(recordedChunks.current, { type: 'video/mp4' })
+            downloadBlob('trace.mp4', blob)
+            recordedChunks.current = []
+            mediaRecorder.current = null
+            setDownloading(false)
+            pointsRef.current = undoResize(canvasRef.current)
+        }
+    }
+
     useEffect(() => {
         const video = videoRef.current
         const canvas = canvasRef.current
@@ -203,6 +243,7 @@ const VideoCanvas = () => {
 
         video.addEventListener('ended', () => {
             isVideoPlaying.current = false
+            if (mediaRecorder.current) mediaRecorder.current.stop()
         })
 
         window.addEventListener('keydown', e => {
@@ -215,16 +256,23 @@ const VideoCanvas = () => {
                 video.currentTime -= 1 / 10
                 return draw(ctx)
             }
+
+            if (e.key === 'z' && e.ctrlKey) {
+                handleUndo()
+                return e.preventDefault()
+            }
         })
-    }, [draw, initializeCanvas])
+    }, [draw, initializeCanvas, handleUndo])
 
     return (
         <Wrapper>
             <Video ref={videoRef} muted>
                 <source src="video3.mp4" type="video/mp4" />
             </Video>
-            <Canvas ref={canvasRef}></Canvas>
+            <Canvas ref={canvasRef} style={{ position: isDownloading ? 'fixed' : 'static', left: isDownloading ? '10000px' : '' }}></Canvas>
+            <br />
             <button onClick={handlePlayVideo}>Play</button>
+            <button onClick={handleDownloadVideo}>Download</button>
         </Wrapper>
     )
 }

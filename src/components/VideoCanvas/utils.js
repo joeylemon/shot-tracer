@@ -30,6 +30,39 @@ export function scaleCanvas (canvas, video) {
     ctx.scale(scale, scale)
 }
 
+export function prepareCanvasForDownload (canvas, video, pts) {
+    const rect = canvas.getBoundingClientRect()
+    const prevWidth = rect.width
+    const prevHeight = rect.height
+    let width = video.videoWidth
+    let height = video.videoHeight
+
+    // If video is greater than 1080p, scale down
+    if (width > 1920) {
+        width = 1920
+        height = width * (video.videoHeight / video.videoWidth)
+    }
+
+    canvas.style.width = width + 'px'
+    canvas.width = width
+    canvas.style.height = height + 'px'
+    canvas.height = height
+
+    const scaleFactor = { x: width / prevWidth, y: height / prevHeight }
+    return {
+        undoResize: canvas => {
+            canvas.style.width = prevWidth + 'px'
+            canvas.width = prevWidth
+            canvas.style.height = prevHeight + 'px'
+            canvas.height = prevHeight
+            return pts
+        },
+        newPts: pts.map(p => {
+            return { ...p, x: p.x * scaleFactor.x, y: p.y * scaleFactor.y }
+        })
+    }
+}
+
 /**
  * Draw a trajectory line by following the given points with a smooth curve
  * @param {CanvasRenderingContext2D} ctx The canvas rendering context
@@ -38,21 +71,25 @@ export function scaleCanvas (canvas, video) {
 export function drawTrajectoryLine (ctx, pts) {
     const [pts1, pts2] = getParallelPoints(pts)
 
-    const grd = ctx.createLinearGradient(pts1[0].x, pts1[0].y, pts1.at(-1).x, pts1.at(-1).y)
-    grd.addColorStop(0, 'rgba(255, 0, 0, 0)')
-    grd.addColorStop(0.3, 'rgba(255, 0, 0, 0.5)')
-    ctx.fillStyle = grd
+    const gradient = ctx.createLinearGradient(pts1[0].x, pts1[0].y, pts1.at(-1).x, pts1.at(-1).y)
+    gradient.addColorStop(0, 'rgba(255, 0, 0, 0)')
+    gradient.addColorStop(0.3, 'rgba(255, 0, 0, 0.5)')
+    gradient.addColorStop(0.99, 'rgba(255, 0, 0, 0.5)')
+    gradient.addColorStop(1, 'rgba(255, 0, 0, 0)')
+    ctx.fillStyle = gradient
 
     let i
     ctx.beginPath()
     ctx.moveTo(pts1[0].x, pts1[0].y)
 
+    // Curve to the midpoints between two points. The end point for one iteration
+    // becomes the control point for the next.
     for (i = 1; i < pts1.length - 2; i++) {
         const xc = (pts1[i].x + pts1[i + 1].x) / 2
         const yc = (pts1[i].y + pts1[i + 1].y) / 2
         ctx.quadraticCurveTo(pts1[i].x, pts1[i].y, xc, yc)
     }
-    // curve through the last two points
+
     ctx.quadraticCurveTo(pts1[i].x, pts1[i].y, pts1[i + 1].x, pts1[i + 1].y)
     ctx.lineTo(pts2.at(-1).x, pts2.at(-1).y)
 
@@ -153,11 +190,12 @@ export function lerp (from, to, frac) {
     return { x: nx, y: ny }
 }
 
-/**
- * Check if the given video is actively playing
- * @param {HTMLVideoElement} video The video reference
- * @returns True if the video is playing, false if not
- */
-export function isVideoPlaying (video) {
-    return !!(!video.paused && !video.ended && video.readyState > 2)
+export function downloadBlob (filename, blob) {
+    const downloadNode = document.createElement('a')
+    downloadNode.setAttribute('href', URL.createObjectURL(blob))
+    downloadNode.setAttribute('target', '_blank')
+    downloadNode.setAttribute('download', filename)
+    document.body.appendChild(downloadNode)
+    downloadNode.click()
+    downloadNode.remove()
 }
