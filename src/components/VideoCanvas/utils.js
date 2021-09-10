@@ -30,36 +30,57 @@ export function scaleCanvas (canvas, video) {
     ctx.scale(scale, scale)
 }
 
-export function prepareCanvasForDownload (canvas, video, pts) {
+/**
+ * Scale the canvas to a higher resolution in preparation for export.
+ * @param {React.MutableRefObject<HTMLCanvasElement>} canvasRef The canvas reference
+ * @param {React.MutableRefObject<HTMLVideoElement>} videoRef The video reference
+ * @param {React.MutableRefObject<Array>} pointsRef The points array reference
+ * @returns {Function} An undo function to reset the canvas back to normal
+ */
+export function prepareCanvasForDownload (canvasRef, videoRef, pointsRef) {
+    const canvas = canvasRef.current
+    const video = videoRef.current
+    const pts = pointsRef.current
+    const ctx = canvas.getContext('2d')
     const rect = canvas.getBoundingClientRect()
     const prevWidth = rect.width
     const prevHeight = rect.height
     let width = video.videoWidth
     let height = video.videoHeight
 
-    // If video is greater than 1080p, scale down
+    // If video is greater than 1080p, scale down to avoid framerate limiting
     if (width > 1920) {
         width = 1920
         height = width * (video.videoHeight / video.videoWidth)
     }
+
+    // Undo any zooming or panning
+    ctx.resetTransform()
 
     canvas.style.width = width + 'px'
     canvas.width = width
     canvas.style.height = height + 'px'
     canvas.height = height
 
+    // Hide the canvas without using display: none (so the canvas still renders)
+    canvas.style.position = 'fixed'
+    canvas.style.left = '10000px'
+
+    // Scale all points by the scale factor
     const scaleFactor = { x: width / prevWidth, y: height / prevHeight }
-    return {
-        undoResize: canvas => {
-            canvas.style.width = prevWidth + 'px'
-            canvas.width = prevWidth
-            canvas.style.height = prevHeight + 'px'
-            canvas.height = prevHeight
-            return pts
-        },
-        newPts: pts.map(p => {
-            return { ...p, x: p.x * scaleFactor.x, y: p.y * scaleFactor.y }
-        })
+    pointsRef.current = pts.map(p => {
+        return { ...p, x: p.x * scaleFactor.x, y: p.y * scaleFactor.y }
+    })
+
+    // Return a function to undo all of the above steps
+    return canvas => {
+        canvas.style.width = prevWidth + 'px'
+        canvas.width = prevWidth
+        canvas.style.height = prevHeight + 'px'
+        canvas.height = prevHeight
+        canvas.style.position = 'static'
+        canvas.style.left = undefined
+        pointsRef.current = pts
     }
 }
 

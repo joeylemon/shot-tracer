@@ -78,8 +78,6 @@ const VideoCanvas = () => {
     const mediaRecorder = useRef(null)
     const recordedChunks = useRef([])
 
-    const [isDownloading, setDownloading] = useState(false)
-
     const draw = useCallback((ctx, continuous) => {
         const rect = canvasRef.current.getBoundingClientRect()
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
@@ -198,15 +196,12 @@ const VideoCanvas = () => {
     }, [draw])
 
     const handleDownloadVideo = () => {
-        setDownloading(true)
-
         const stream = canvasRef.current.captureStream(30)
         mediaRecorder.current = new MediaRecorder(stream, {
             mimeType: 'video/webm;codecs=vp8,opus'
         })
 
-        const { newPts, undoResize } = prepareCanvasForDownload(canvasRef.current, videoRef.current, pointsRef.current)
-        pointsRef.current = newPts
+        const undoResize = prepareCanvasForDownload(canvasRef, videoRef, pointsRef)
         handlePlayVideo()
 
         // ondataavailable will fire in interval of `time || 4000 ms`
@@ -221,8 +216,7 @@ const VideoCanvas = () => {
             downloadBlob('trace.mp4', blob)
             recordedChunks.current = []
             mediaRecorder.current = null
-            setDownloading(false)
-            pointsRef.current = undoResize(canvasRef.current)
+            undoResize(canvasRef.current)
         }
     }
 
@@ -269,7 +263,7 @@ const VideoCanvas = () => {
             <Video ref={videoRef} muted>
                 <source src="video3.mp4" type="video/mp4" />
             </Video>
-            <Canvas ref={canvasRef} style={{ position: isDownloading ? 'fixed' : 'static', left: isDownloading ? '10000px' : '' }}></Canvas>
+            <Canvas ref={canvasRef}></Canvas>
             <br />
             <button onClick={handlePlayVideo}>Play</button>
             <button onClick={handleDownloadVideo}>Download</button>
